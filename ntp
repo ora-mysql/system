@@ -1,0 +1,90 @@
+场景1：
+ntpserver: 10.20.21.211
+数据库(客户)端: 10.20.21.212
+
+实现ntpserver 同步 数据库（客户）端
+
+在ntpserver端:
+service ntpd start
+vi /etc/ntp.conf
+
+## 加入server 127.127.1.0，防止server 0，1,2,3不能连接，用本地server提供对外服务，
+# Use public servers from the pool.ntp.org project.
+# Please consider joining the pool (http://www.pool.ntp.org/join.html).
+
+server 0.rhel.pool.ntp.org iburst
+server 1.rhel.pool.ntp.org iburst
+server 2.rhel.pool.ntp.org iburst
+server 3.rhel.pool.ntp.org iburst
+server 127.127.1.0
+
+3. service ntpd restart
+[root@as2 ~]# service ntpd restart
+Shutting down ntpd:                                        [  OK  ]
+Starting ntpd:                                             [  OK  ]
+
+[root@as2 ~]# ntpq -p
+     remote           refid      st t when poll reach   delay   offset  jitter
+==============================================================================
+*LOCAL(0)        .LOCL.           5 l    7   64   77    0.000    0.000   0.000
+
+在数据库(客户)端：
+[root@as3 ~]# service ntpd stop
+[root@as3 ~]# ntpdate 10.20.21.211
+17 Jan 18:38:40 ntpdate[30415]: adjust time server 10.20.21.211 offset 0.000015 sec
+
+[root@as3 ~]# date -s "2017-01-01 00:00:00";hwclock -w
+Sun Jan  1 00:00:00 CST 2017
+[root@as3 ~]# date
+Sun Jan  1 00:00:03 CST 2017
+[root@as3 ~]# ntpdate 10.20.21.211
+17 Jan 19:43:40 ntpdate[32504]: step time server 10.20.21.211 offset 32989414.830982 sec
+[root@as3 ~]# date
+Wed Jan 17 19:43:41 CST 2018
+
+场景2：
+交易所服务器：10.20.21.210
+本地ntpserver: 10.20.21.211
+数据库(客户)端：10.20.21.212
+
+实现交易所时间 同步 本地ntpserver， 本地ntpserver 同步 数据库端
+
+注意：
+交易所服务器与本地ntpserver不用ntpdate同步，就用ntp同步即可；
+数据库端于本地ntpserver还是用ntpdate 同步
+
+在交易所服务器端:
+1. service ntpd start
+2. vi /etc/ntp.conf
+server 127.127.1.0
+
+在本地ntpserver端，加入交易所服务器的ip:
+1. service ntpd start
+2. vi /etc/ntp.conf
+server 10.21.21.210
+server 127.127.1.0
+
+3. service ntpd restart (多重启几次，一般restart两次，以保证及时进行同步)
+[root@as2 ~]# service ntpd restart
+Shutting down ntpd:                                        [  OK  ]
+Starting ntpd:                                             [  OK  ]
+
+
+查看状态,  注意显示synchronised to NTP server说明ntp已经在同步了
+
+[root@as2 ~]# ntpq -p
+     remote           refid      st t when poll reach   delay   offset  jitter
+==============================================================================
+*10.20.21.210    LOCAL(0)         6 u  111  128  377    0.129    0.034   0.036
+ LOCAL(0)        .LOCL.           5 l 1260   64    0    0.000    0.000   0.000
+
+[root@as2 ~]# ntpstat
+synchronised to NTP server (10.20.21.210) at stratum 7 
+   time correct to within 7949 ms
+   polling server every 64 s
+
+
+在数据库(客户)端:
+[root@as3 ~]# service ntpd stop
+[root@as3 ~]# ntpdate 10.20.21.211
+17 Jan 19:16:07 ntpdate[31505]: adjust time server 10.20.21.211 offset -0.000083 sec
