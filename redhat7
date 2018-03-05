@@ -1,0 +1,106 @@
+1. 修改主机名：  注意不要有小数点，否则小数点后面的信息将不显示
+
+vi /etc/hostname  
+或者 
+hostnamectl set-hostname XXXXXX   
+
+
+2. 关闭/开启服务：
+systemctl disable/enable 服务名 
+
+
+3. 使用nmcli命令去做网卡bond(team driver)：
+
+### 检查网络连接详情
+nmcli connection show  
+或者 
+nmcli conn sh
+
+
+[root@redhat ~]# nmcli conn sh
+NAME                UUID                                  TYPE            DEVICE 
+bond0               f17da151-1b3d-456d-b313-b63932a5d9ff  team            bond0  
+bond0-port1         d4ebe443-ba4b-4ec1-98a4-a2ec43b0aff4  802-3-ethernet  ens33  
+bond0-port2         31ab55af-3f6b-48c1-8a8f-b9cdf036f593  802-3-ethernet  ens38  
+virbr0              0e81bff8-972e-4977-827c-69d3ee381144  bridge          virbr0
+
+
+
+[root@redhat ~]# nmcli device status
+DEVICE      TYPE      STATE      CONNECTION  
+virbr0      bridge    connected  virbr0      
+ens33       ethernet  connected  bond0-port1 
+ens38       ethernet  connected  bond0-port2 
+bond0       team      connected  bond0       
+
+
+
+重启网络：
+systemctl restart network  或者 service network restart(这里发现这个6版本里面的命令还是适用的，但底层还是去调用systemctl)
+
+
+
+
+### 查看网卡
+[root@redhat network-scripts]# nmcli con show  
+NAME    UUID                                  TYPE            DEVICE 
+ens33   2d798dde-cb9a-4e70-a995-8498cfa20026  802-3-ethernet  ens33  
+ens38   3ea0b907-c2b9-4867-a686-14124d27ec9b  802-3-ethernet  ens38  
+virbr0  3e06d4a7-659c-4135-80c5-fc9747f18524  bridge          virbr0 
+
+### 创建一个名为 bond0 并且属性为team的链路接口
+[root@redhat network-scripts]# nmcli con add type team con-name bond0 ifname bond0 config '{"runner": {"name":"activebackup"}}'
+Connection 'bond0' (acb31286-44c3-4af8-8622-5f7d9a1b8490) successfully added.
+
+### 为team0配置ip地址与网关
+[root@redhat network-scripts]# nmcli con modify bond0  ipv4.address 192.168.62.7/24 ipv4.gateway 192.168.62.1
+[root@redhat network-scripts]# 
+
+
+### 设置bond0的属性为 manual
+[root@redhat network-scripts]# nmcli connection modify bond0 ipv4.method manual 
+[root@redhat network-scripts]# 
+
+### 将第一块网卡口 加到 bond0 接口
+[root@redhat network-scripts]# nmcli connection add type team-slave con-name bond0-port1 ifname ens33 master bond0
+Connection 'ifcfg-bond0-port1' (0b2a80ca-01ce-4f83-9558-85ae685be633) successfully added.
+
+### 将第二块网卡口 加到 bond0 接口
+[root@redhat network-scripts]# nmcli connection add type team-slave con-name bond0-port2 ifname ens38 master bond0
+Connection 'ifcfg-bond0-port2' (b96d91e8-045d-40e8-99d3-fd1cbda879c0) successfully added.
+
+# 启用接口中的网卡
+[root@redhat network-scripts]# nmcli connection up bond0-port1;
+Connection successfully activated (D-Bus active path: /org/freedesktop/NetworkManager/ActiveConnection/11)
+
+[root@redhat network-scripts]# nmcli connection up bond0-port2
+Connection successfully activated (D-Bus active path: /org/freedesktop/NetworkManager/ActiveConnection/12)
+
+### 查看产生的配置文件
+-rw-r--r--. 1 root root   345 Dec 20 14:59 ifcfg-ens33
+-rw-r--r--. 1 root root   345 Dec 20 14:59 ifcfg-ens38
+-rw-r--r--. 1 root root   392 Dec 20 15:59 ifcfg-bond0
+-rw-r--r--. 1 root root   127 Dec 20 16:08 ifcfg-bond0-port1
+-rw-r--r--. 1 root root   127 Dec 20 16:10 ifcfg-bond0-port2
+
+### 检查bond0状态
+[root@redhat network-scripts]# teamdctl bond0 st
+setup:
+  runner: activebackup
+ports:
+  ens33
+    link watches:
+      link summary: up
+      instance[link_watch_0]:
+        name: ethtool
+        link: up
+        down count: 0
+  ens38
+    link watches:
+      link summary: up
+      instance[link_watch_0]:
+        name: ethtool
+        link: up
+        down count: 0
+runner:
+  active port: ens33
