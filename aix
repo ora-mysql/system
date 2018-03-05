@@ -1,0 +1,64 @@
+1. 列出所有的vg： lsvg
+
+2. 查看vg对应的物理存储/磁盘: lsvg -p rootvg
+
+3. 列出所有的存储/磁盘: lspv
+3.1 重新加载存储
+cfgmgr -v
+3.2 删除设备
+rmdev -Rdl hdisk6
+3.3 查看是否做了mirror
+lsvg -l rootvg  （LPs:PPs 1:2 就是做了mirror）
+
+4. 查看磁盘的大小，以兆字节为单位： bootinfo -s hdisk0
+
+5. 新建vg： smit mkvg
+
+6. 拓展vg, 如把规划的其他盘加到datavg里面
+extendvg datavg hdisk0 hdisk1 ... hdiskn 
+
+7. 创建lv：  smit mklv
+
+8. 在创建的lv上建文件系统，smit crfs
+或者（还是推荐用smit方式创建）
+mkdir /u02
+mklv -t jfs2 -y lv_u02 datadg 200g
+crfs -v jfs2 -d lv_u02 -A yes -m /u02
+mount /u02
+
+这个时候，就可以使用新创建的文件系统了，存放文件，创建数据库等等。
+
+
+9. 修改大小
+chfs -a size=+10G /
+
+
+10. 检查网络 
+ifconfig -a
+lsdev |grep et 
+lsattr -El ent0
+smit etherchannel
+
+11.关机：
+shutdown -F
+
+12. 重启：
+shutdown -Fr
+
+13. 查看版本
+oslevel -s
+
+14. 查看内存，单位kbytes
+bootinfo -r
+
+15. 查看硬件是64位 还是 32位
+bootinfo -y
+
+16. 检查错误报告
+errpt | more
+errpt -d H -T PERM  (硬件)
+errpt -d S -T PERM  （软件）
+
+17. 检查交换分区使用情况
+lsps -a
+lsps -s
